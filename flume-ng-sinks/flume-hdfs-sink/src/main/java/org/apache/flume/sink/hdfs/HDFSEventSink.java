@@ -231,10 +231,10 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
       if(fileType.equalsIgnoreCase(HDFSWriterFactory.DataStreamType)
          || fileType.equalsIgnoreCase(HDFSWriterFactory.CompStreamType)) {
         // Output is written into text files, by default separate events by \n
-        this.writeFormat = HDFSFormatterFactory.hdfsTextFormat;
+        this.writeFormat = HDFSFormatterType.Text.name();
       } else {
         // Output is written into binary files, so use binary writable format
-        this.writeFormat = HDFSFormatterFactory.hdfsWritableFormat;
+        this.writeFormat = HDFSFormatterType.Writable.name();
       }
     }
 
