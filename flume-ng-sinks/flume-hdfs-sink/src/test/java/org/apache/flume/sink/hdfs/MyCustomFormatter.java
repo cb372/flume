@@ -19,15 +19,13 @@
 
 package org.apache.flume.sink.hdfs;
 
+import org.apache.flume.Context;
 import org.apache.flume.Event;
 import org.apache.flume.sink.FlumeFormatter;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 
 public class MyCustomFormatter implements FlumeFormatter {
-
-  public MyCustomFormatter() {
-  }
 
   @Override
   public Class<LongWritable> getKeyClass() {
@@ -54,5 +52,13 @@ public class MyCustomFormatter implements FlumeFormatter {
     return new byte[10]; 
   }
 
+  public static class Builder implements FlumeFormatter.Builder {
+
+    @Override
+    public FlumeFormatter build(Context context) {
+      return new MyCustomFormatter();
+    }
+  
+  }
 
 }

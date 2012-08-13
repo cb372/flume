@@ -21,18 +21,18 @@ package org.apache.flume.sink.hdfs;
 import org.apache.flume.sink.FlumeFormatter;
 
 public enum HDFSFormatterType {
-  Writable(HDFSWritableFormatter.class),
-  Text(HDFSTextFormatter.class),
+  Writable(HDFSWritableFormatter.Builder.class),
+  Text(HDFSTextFormatter.Builder.class),
   Other(null);
 
-  private final Class<? extends FlumeFormatter> formatterClass;
+  private final Class<? extends FlumeFormatter.Builder> builderClass;
 
-  HDFSFormatterType(Class<? extends FlumeFormatter> formatterClass) {
-    this.formatterClass = formatterClass;
+  HDFSFormatterType(Class<? extends FlumeFormatter.Builder> builderClass) {
+    this.builderClass = builderClass;
   }
 
-  public Class<? extends FlumeFormatter> getFormatterClass() {
-    return formatterClass;
+  public Class<? extends FlumeFormatter.Builder> getBuilderClass() {
+    return builderClass;
   }
 
 }
