@@ -20,6 +20,7 @@ package org.apache.flume.sink.hdfs;
 
 import static org.junit.Assert.assertTrue;
 
+import org.apache.flume.Context;
 import org.apache.flume.sink.FlumeFormatter;
 import org.junit.Test;
 
@@ -27,7 +28,7 @@ public class TestHDFSFormatterFactory {
 
   @Test
   public void getTextFormatter() {
-    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Text");
+    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Text", new Context());
 
     assertTrue(formatter != null);   
     assertTrue(formatter.getClass().getName(), 
@@ -36,7 +37,7 @@ public class TestHDFSFormatterFactory {
 
   @Test
   public void getWritableFormatter() {
-    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Writable");
+    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Writable", new Context());
 
     assertTrue(formatter != null);   
     assertTrue(formatter.getClass().getName(), 
@@ -46,7 +47,7 @@ public class TestHDFSFormatterFactory {
   @Test
   public void getCustomFormatter() {
     FlumeFormatter formatter = HDFSFormatterFactory.getFormatter(
-      "org.apache.flume.sink.hdfs.MyCustomFormatter");
+      "org.apache.flume.sink.hdfs.MyCustomFormatter$Builder", new Context());
 
     assertTrue(formatter != null);   
     assertTrue(formatter.getClass().getName(), 

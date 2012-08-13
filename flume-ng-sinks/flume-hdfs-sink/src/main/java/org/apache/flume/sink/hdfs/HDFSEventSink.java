@@ -397,8 +397,10 @@ public class HDFSEventSink extends AbstractSink implements Configurable {
         // we haven't seen this file yet, so open it and cache the handle
         if (bucketWriter == null) {
           HDFSWriter hdfsWriter = writerFactory.getWriter(fileType);
+          Context formatterContext = new Context(
+              context.getSubProperties(HDFSFormatterFactory.CTX_PREFIX));
           FlumeFormatter formatter = HDFSFormatterFactory
-              .getFormatter(writeFormat);
+              .getFormatter(writeFormat, formatterContext);
 
           bucketWriter = new BucketWriter(rollInterval, rollSize, rollCount,
               batchSize, context, realPath, codeC, compType, hdfsWriter,

@@ -17,6 +17,7 @@
  */
 package org.apache.flume.sink.hdfs;
 
+import org.apache.flume.Context;
 import org.apache.flume.Event;
 import org.apache.flume.sink.FlumeFormatter;
 import org.apache.hadoop.io.BytesWritable;
@@ -64,4 +65,15 @@ public class HDFSWritableFormatter implements FlumeFormatter {
   public byte[] getBytes(Event e) {
     return makeByteWritable(e).getBytes();
   }
+
+  public static class Builder implements FlumeFormatter.Builder {
+    
+    @Override
+    public FlumeFormatter build(Context context) {
+      return new HDFSWritableFormatter();
+    }
+  
+  }
+
+  
 }

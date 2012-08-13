@@ -18,6 +18,7 @@
 
 package org.apache.flume.sink;
 
+import org.apache.flume.Context;
 import org.apache.flume.Event;
 
 public interface FlumeFormatter {
@@ -33,5 +34,13 @@ public interface FlumeFormatter {
   Object getValue(Event e);
 
   byte[] getBytes(Event e);
+
+  /**
+   * Knows how to construct this output formatter.<br/>
+   * <b>Note: Implementations MUST provide a public a no-arg constructor.</b>
+   */
+  public interface Builder {
+    public FlumeFormatter build(Context context);
+  }
 
 }
