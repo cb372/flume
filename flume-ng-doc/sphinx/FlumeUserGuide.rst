@@ -894,6 +894,33 @@ Example for agent named **agent_foo**:
   agent_foo.channels = memoryChannel-1
   agent_foo.sources.legacysource-1.type = your.namespace.YourClass
   agent_foo.sources.legacysource-1.channels = memoryChannel-1
+  
+Scribe Source
+~~~~~~~~~~~~~
+
+Scribe is another type of ingest system. To adopt existing Scribe ingest system, 
+Flume should use ScribeSource based on Thrift with compatible transfering protocol.
+The deployment of Scribe please following guide from Facebook.
+Required properties are in **bold**.
+
+==============  ===========  ==============================================
+Property Name   Default      Description
+==============  ===========  ==============================================
+**type**        --           The component type name, needs to be ``org.apache.flume.source.scribe.ScribeSource``
+port            1499         Port that Scribe should be connected
+workerThreads   5			 Handing threads number in Thrift
+==============  ===========  ==============================================
+
+Example for agent named **agent_foo**:
+
+.. code-block:: properties
+
+  agent_foo.sources = scribesource-1
+  agent_foo.channels = memoryChannel-1
+  agent_foo.sources.scribesource-1.type = org.apache.flume.source.scribe.ScribeSource
+  agent_foo.sources.scribesource-1.port = 1463
+  agent_foo.sources.scribesource-1.workerThreads = 5
+  agent_foo.sources.scribesource-1.channels = memoryChannel-1
 
 Flume Sinks
 -----------
@@ -957,6 +984,7 @@ Name                    Default       Description
 **channel**             --
 **type**                --            The component type name, needs to be ``hdfs``
 **hdfs.path**           --            HDFS directory path (eg hdfs://namenode/flume/webdata/)
+hdfs.timeZone           Local Time    Name of the timezone that should be used for resolving the directory path, e.g. America/Los_Angeles.
 hdfs.filePrefix         FlumeData     Name prefixed to files created by Flume in hdfs directory
 hdfs.rollInterval       30            Number of seconds to wait before rolling current file
                                       (0 = never roll based on time interval)
@@ -1629,17 +1657,22 @@ are named components, here is an example of how they are created through configu
 .. code-block:: properties
 
   agent_foo.sources = source_foo
+  agent_foo.sinks = hdfs
   agent_foo.channels = channel-1
   agent_foo.sources.source_foo.interceptors = a b
   agent_foo.sources.source_foo.interceptors.a.type = org.apache.flume.interceptor.HostInterceptor$Builder
   agent_foo.sources.source_foo.interceptors.a.preserveExisting = false
   agent_foo.sources.source_foo.interceptors.a.hostHeader = hostname
   agent_foo.sources.source_foo.interceptors.b.type = org.apache.flume.interceptor.TimestampInterceptor$Builder
+  agent_foo.sinks.hdfs.filePrefix = FlumeData.%{CollectorHost}.%Y-%m-%d
+  agent_foo.sinks.hdfs.channel = channel-1
 
 Note that the interceptor builders are passed to the type config parameter. The interceptors are themselves
 configurable and can be passed configuration values just like they are passed to any other configurable component.
 In the above example, events are passed to the HostInterceptor first and the events returned by the HostInterceptor
-are then passed along to the TimestampInterceptor.
+are then passed along to the TimestampInterceptor. You can specify either the fully qualified class name (FQCN) 
+or the alias ``TIMESTAMP``. If you have multiple collectors writing to the same HDFS path then you could also use 
+the HostInterceptor.
 
 Timestamp Interceptor
 ~~~~~~~~~~~~~~~~~~~~~
@@ -1651,7 +1684,7 @@ can preserve an existing timestamp if it is already present in the configuration
 ================  =======  ========================================================================
 Property Name     Default  Description
 ================  =======  ========================================================================
-**type**          --       The component type name, has to be ``TIMESTAMP``
+**type**          --       The component type name, has to be ``TIMESTAMP`` or the FQCN
 preserveExisting  false    If the timestamp already exists, should it be preserved - true or false
 ================  =======  ========================================================================
 
@@ -1842,6 +1875,56 @@ starts with ``org.apache.flume``):
 
   ManagementFactory.getPlatformMBeanServer().registerMBean(this, objName);
 
+JSON Reporting
+--------------
+Flume can also report metrics in a JSON format. To enable reporting in JSON format, Flume hosts
+a Web server on a configurable port. Flume reports metrics in the following JSON format:
+
+.. code-block:: java
+
+  {
+  "typeName1.componentName1" : {"metric1" : "metricValue1", "metric2" : "metricValue2"},
+  "typeName2.componentName2" : {"metric3" : "metricValue3", "metric4" : "metricValue4"}
+  }
+
+Here is an example:
+
+.. code-block:: java
+
+  {
+  "CHANNEL.fileChannel":{"EventPutSuccessCount":"468085",
+                        "Type":"CHANNEL",
+                        "StopTime":"0",
+                        "EventPutAttemptCount":"468086",
+                        "ChannelSize":"233428",
+                        "StartTime":"1344882233070",
+                        "EventTakeSuccessCount":"458200",
+                        "ChannelCapacity":"600000",
+                        "EventTakeAttemptCount":"458288"},
+  "CHANNEL.memChannel":{"EventPutSuccessCount":"22948908",
+                     "Type":"CHANNEL",
+                     "StopTime":"0",
+                     "EventPutAttemptCount":"22948908",
+                     "ChannelSize":"5",
+                     "StartTime":"1344882209413",
+                     "EventTakeSuccessCount":"22948900",
+                     "ChannelCapacity":"100",
+                     "EventTakeAttemptCount":"22948908"}
+  }
+
+=======================  =======  =====================================================================================
+Property Name            Default  Description
+=======================  =======  =====================================================================================
+**type**                 --       The component type name, has to be ``HTTP``
+port                     41414    The port to start the server on.
+=======================  =======  =====================================================================================
+
+We can start Flume with Ganglia support as follows::
+
+  $ bin/flume-ng agent --conf-file example.conf --name agent1 -Dflume.monitoring.type=HTTP -Dflume.monitoring.port=34545
+
+Metrics will then be available at **http://<hostname>:<port>/metrics** webpage.
+Custom components can report metrics as mentioned in the Ganglia section above.
 
 Custom Reporting
 ----------------
@@ -1861,6 +1944,96 @@ Property Name            Default  Description
 =======================  =======  ========================================
 
 
+Topology Design Considerations
+==============================
+Flume is very flexible and allows a large range of possible deployment
+scenarios. If you plan to use Flume in a large, production deployment, it is
+prudent to spend some time thinking about how to express your problem in
+terms of a Flume topology. This section covers a few considerations.
+
+Is Flume a good fit for your problem?
+-------------------------------------
+If you need to ingest textual log data into Hadoop/HDFS then Flume is the
+right fit for your problem, full stop. For other use cases, here are some
+guidelines:
+
+Flume is designed to transport and ingest regularly generated event data over
+relatively stable, potentially complex topologies. The notion of "event data"
+is very broadly defined. To Flume, an event is just a generic blob of bytes.
+There are some limitations on how large an event can be - for instance, it
+cannot be larger than you can store in memory or on disk on a single machine -
+but in practice flume events can be everything from textual log entries to
+image files. The key property of an event  is that they are generated in a
+continuous, streaming fashion. If your data is not regularly generated
+(i.e. you are trying to do a single bulk load of data into a Hadoop cluster)
+then Flume will still work, but it is probably overkill for your situation.
+Flume likes relatively stable topologies. Your topologies do not need to be
+immutable, because Flume can deal with changes in topology without losing data
+and can also tolerate periodic reconfiguration due to fail-over or
+provisioning. It probably won't work well if you plant to change topologies
+every day, because reconfiguration takes some thought and overhead.
+
+Flow reliability in Flume
+-------------------------
+The reliability of a Flume flow depends on several factors. By adjusting these
+factors, you can achieve a wide array of reliability options with Flume.
+
+**What type of channel you use.** Flume has both durable channels (those which
+will persist data to disk) and non durable channels (those which will lose
+data if a machine fails). Durable channels use disk-based storage, and data
+stored in such channels will persist across machine restarts or non
+disk-related failures.
+
+**Whether your channels are sufficiently provisioned for the workload.** Channels
+in Flume act as buffers at various hops. These buffers have a fixed capacity,
+and once that capacity is full you will create back pressure on earlier points
+in the flow. If this pressure propagates to the source of the flow, Flume will
+become unavailable and may lose data.
+
+**Whether you use redundant topologies.** Flume let's you replicate flows
+across redundant topologies. This can provide a very easy source of fault
+tolerance and one which is overcomes both disk or machine failures. 
+
+*The best way to think about reliability in a Flume topology is to consider
+various failure scenarios and their outcomes.* What happens if a disk fails?
+What happens if a machine fails? What happens if your terminal sink
+(e.g. HDFS) goes down for some time and you have back pressure? The space of
+possible designs is huge, but the underlying questions you need to ask are
+just a handful.
+
+Flume topology design
+---------------------
+The first step in designing a Flume topology is to enumerate all sources
+and destinations (terminal sinks) for your data. These will define the edge
+points of your topology. The next consideration is whether to introduce
+intermediate aggregation tiers or event routing. If you are collecting data
+form a large number of sources, it can be helpful to aggregate the data in
+order to simplify ingestion at the terminal sink. An aggregation tier can
+also smooth out burstiness from sources or unavailability at sinks, by
+acting as a buffer. If you are routing data between different locations,
+you may also want to split flows at various points: this creates
+sub-topologies which may themselves include aggregation points.
+
+Sizing a Flume deployment
+-------------------------
+Once you have an idea of what your topology will look like, the next question
+is how much hardware and networking capacity is needed. This starts by
+quantifying how much data you generate. That is not always
+a simple task! Most data streams are bursty (for instance, due to diurnal
+patterns) and potentially unpredictable. A good starting point is to think
+about the maximum throughput you'll have in each tier of the topology, both
+in terms of *events per second* and *bytes per second*. Once you know the
+required throughput of a given tier, you can calulate a lower bound on how many
+nodes you require for that tier. To determine attainable throughput, it's
+best to experiment with Flume on your hardware, using synthetic or sampled
+event data. In general, disk-based channels
+should get 10's of MB/s and memory based channels should get 100's of MB/s or
+more. Performance will vary widely, however depending on hardware and
+operating environment.
+
+Sizing aggregate throughput gives you a lower bound on the number of nodes
+you will need to each tier. There are several reasons to have additional
+nodes, such as increased redundancy and better ability to absorb bursts in load.
 
 Troubleshooting
 ===============

@@ -48,6 +48,7 @@ limitations under the License.
     <module>flume-ng-core</module>
     <module>flume-ng-configuration</module>
     <module>flume-ng-sinks</module>
+    <module>flume-ng-sources</module>
     <module>flume-ng-node</module>
     <module>flume-ng-dist</module>
     <module>flume-ng-channels</module>
@@ -459,7 +460,7 @@ limitations under the License.
           <version>2.12</version>
           <configuration>
             <forkMode>always</forkMode>
-            <forkedProcessTimeoutInSeconds>480</forkedProcessTimeoutInSeconds>
+            <forkedProcessTimeoutInSeconds>900</forkedProcessTimeoutInSeconds>
             <redirectTestOutputToFile>true</redirectTestOutputToFile>
             <includes>
               <include>${test.include.pattern}</include>
@@ -520,7 +521,7 @@ limitations under the License.
             <stringType>String</stringType>
           </configuration>
           -->
-          <version>1.6.1</version>
+          <version>1.7.1</version>
         </plugin>
 
         <plugin>
@@ -593,6 +594,13 @@ limitations under the License.
         <scope>test</scope>
       </dependency>
 
+      <dependency>
+        <groupId>org.easytesting</groupId>
+        <artifactId>fest-reflect</artifactId>
+        <version>1.4</version>
+        <scope>test</scope>
+      </dependency>
+
       <!-- Dependencies: compile -->
 
       <dependency>
@@ -638,19 +646,19 @@ limitations under the License.
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
-        <version>1.6.3</version>
+        <version>1.7.1</version>
       </dependency>
 
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-compiler</artifactId>
-        <version>1.6.3</version>
+        <version>1.7.1</version>
       </dependency>
 
       <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro-ipc</artifactId>
-        <version>1.6.3</version>
+        <version>1.7.1</version>
         <exclusions>
           <exclusion>
             <groupId>org.mortbay.jetty</groupId>
@@ -675,6 +683,13 @@ limitations under the License.
         <groupId>org.mortbay.jetty</groupId>
         <artifactId>servlet-api</artifactId>
         <version>2.5-20110124</version>
+      </dependency>
+
+      <!--  Gson: Java to Json conversion -->
+      <dependency>
+        <groupId>com.google.code.gson</groupId>
+        <artifactId>gson</artifactId>
+        <version>2.2.2</version>
       </dependency>
 
       <dependency>
@@ -803,6 +818,12 @@ limitations under the License.
       <dependency>
         <groupId>org.apache.flume.flume-ng-sinks</groupId>
         <artifactId>flume-ng-hbase-sink</artifactId>
+        <version>1.3.0-SNAPSHOT</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.flume.flume-ng-sources</groupId>
+        <artifactId>flume-scribe-source</artifactId>
         <version>1.3.0-SNAPSHOT</version>
       </dependency>
 

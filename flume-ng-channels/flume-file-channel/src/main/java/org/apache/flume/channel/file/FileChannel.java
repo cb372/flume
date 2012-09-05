@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.flume.Channel;
 import org.apache.flume.ChannelException;
@@ -86,19 +85,14 @@ public class FileChannel extends BasicChannelSemantics {
   private int checkpointWriteTimeout;
   private String channelNameDescriptor = "[channel=unknown]";
   private ChannelCounter channelCounter;
+  private boolean useLogReplayV1;
+  private boolean useFastReplay = false;
 
   @Override
   public synchronized void setName(String name) {
     channelNameDescriptor = "[channel=" + name + "]";
     super.setName(name);
   }
-
-  /**
-   * Transaction IDs should unique within a file channel
-   * across JVM restarts.
-   */
-  private static final AtomicLong TRANSACTION_ID =
-      new AtomicLong(System.currentTimeMillis());
 
   @Override
   public void configure(Context context) {
@@ -196,6 +190,13 @@ public class FileChannel extends BasicChannelSemantics {
           FileChannelConfiguration.DEFAULT_CHECKPOINT_WRITE_TIMEOUT;
     }
 
+    useLogReplayV1 = context.getBoolean(
+        FileChannelConfiguration.USE_LOG_REPLAY_V1,
+          FileChannelConfiguration.DEFAULT_USE_LOG_REPLAY_V1);
+
+    useFastReplay = context.getBoolean(
+            FileChannelConfiguration.USE_FAST_REPLAY,
+            FileChannelConfiguration.DEFAULT_USE_FAST_REPLAY);
 
     if(queueRemaining == null) {
       queueRemaining = new Semaphore(capacity, true);
@@ -223,8 +224,9 @@ public class FileChannel extends BasicChannelSemantics {
       builder.setLogDirs(dataDirs);
       builder.setChannelName(getName());
       builder.setCheckpointWriteTimeout(checkpointWriteTimeout);
+      builder.setUseLogReplayV1(useLogReplayV1);
+      builder.setUseFastReplay(useFastReplay);
       log = builder.build();
-
       log.replay();
       open = true;
 
@@ -243,6 +245,7 @@ public class FileChannel extends BasicChannelSemantics {
     if (open) {
       channelCounter.start();
       channelCounter.setChannelSize(getDepth());
+      channelCounter.setChannelCapacity(capacity);
     }
     super.start();
   }
@@ -259,6 +262,7 @@ public class FileChannel extends BasicChannelSemantics {
     super.stop();
   }
 
+  @Override
   public String toString() {
     return "FileChannel " + getName() + " { dataDirs: " +
         Arrays.toString(dataDirs) + " }";
@@ -273,7 +277,7 @@ public class FileChannel extends BasicChannelSemantics {
           "Thread has transaction which is still open: " +
               trans.getStateAsString()  + channelNameDescriptor);
     }
-    trans = new FileBackedTransaction(log, TRANSACTION_ID.incrementAndGet(),
+    trans = new FileBackedTransaction(log, TransactionIDOracle.next(),
         transactionCapacity, keepAlive, queueRemaining, getName(),
         channelCounter);
     transactions.set(trans);
@@ -342,17 +346,37 @@ public class FileChannel extends BasicChannelSemantics {
             "committing more frequently, increasing capacity or " +
             "increasing thread count. " + channelNameDescriptor);
       }
+      // this does not need to be in the critical section as it does not
+      // modify the structure of the log or queue.
       if(!queueRemaining.tryAcquire(keepAlive, TimeUnit.SECONDS)) {
         throw new ChannelException("Cannot acquire capacity. "
             + channelNameDescriptor);
       }
+      boolean success = false;
+      boolean lockAcquired = log.tryLockShared();
       try {
+        if(!lockAcquired) {
+          throw new ChannelException("Failed to obtain lock for writing to the log. "
+              + "Try increasing the log write timeout value or disabling it by "
+              + "setting it to 0. " + channelNameDescriptor);
+        }
         FlumeEventPointer ptr = log.put(transactionID, event);
         Preconditions.checkState(putList.offer(ptr), "putList offer failed "
              + channelNameDescriptor);
+        queue.addWithoutCommit(ptr, transactionID);
+        success = true;
       } catch (IOException e) {
         throw new ChannelException("Put failed due to IO error "
                 + channelNameDescriptor, e);
+      } finally {
+        if(lockAcquired) {
+          log.unlockShared();
+        }
+        if(!success) {
+          // release slot obtained in the case
+          // the put fails for any reason
+          queueRemaining.release();
+        }
       }
     }
 
@@ -365,24 +389,32 @@ public class FileChannel extends BasicChannelSemantics {
             "increasing capacity, or increasing thread count. "
                + channelNameDescriptor);
       }
-      FlumeEventPointer ptr = queue.removeHead();
-      if(ptr != null) {
-        try {
-          // first add to takeList so that if write to disk
-          // fails rollback actually does it's work
-          Preconditions.checkState(takeList.offer(ptr), "takeList offer failed "
-               + channelNameDescriptor);
-          log.take(transactionID, ptr); // write take to disk
-          Event event = log.get(ptr);
-          return event;
-        } catch (IOException e) {
-          throw new ChannelException("Take failed due to IO error "
-                  + channelNameDescriptor, e);
-        }
+      if(!log.tryLockShared()) {
+        throw new ChannelException("Failed to obtain lock for writing to the log. "
+            + "Try increasing the log write timeout value or disabling it by "
+            + "setting it to 0. " + channelNameDescriptor);
       }
-      return null;
+      try {
+        FlumeEventPointer ptr = queue.removeHead(transactionID);
+        if(ptr != null) {
+          try {
+            // first add to takeList so that if write to disk
+            // fails rollback actually does it's work
+            Preconditions.checkState(takeList.offer(ptr), "takeList offer failed "
+                 + channelNameDescriptor);
+            log.take(transactionID, ptr); // write take to disk
+            Event event = log.get(ptr);
+            return event;
+          } catch (IOException e) {
+            throw new ChannelException("Take failed due to IO error "
+                    + channelNameDescriptor, e);
+          }
+        }
+        return null;
+      } finally {
+        log.unlockShared();
+      }
     }
-
     @Override
     protected void doCommit() throws InterruptedException {
       int puts = putList.size();
@@ -390,35 +422,52 @@ public class FileChannel extends BasicChannelSemantics {
       if(puts > 0) {
         Preconditions.checkState(takes == 0, "nonzero puts and takes "
                 + channelNameDescriptor);
-        synchronized (queue) {
-          while(!putList.isEmpty()) {
-            if(!queue.addTail(putList.removeFirst())) {
-              StringBuilder msg = new StringBuilder();
-              msg.append("Queue add failed, this shouldn't be able to ");
-              msg.append("happen. A portion of the transaction has been ");
-              msg.append("added to the queue but the remaining portion ");
-              msg.append("cannot be added. Those messages will be consumed ");
-              msg.append("despite this transaction failing. Please report.");
-              msg.append(channelNameDescriptor);
-              LOG.error(msg.toString());
-              Preconditions.checkState(false, msg.toString());
-            }
-          }
+        if(!log.tryLockShared()) {
+          throw new ChannelException("Failed to obtain lock for writing to the log. "
+              + "Try increasing the log write timeout value or disabling it by "
+              + "setting it to 0. " + channelNameDescriptor);
         }
         try {
           log.commitPut(transactionID);
           channelCounter.addToEventPutSuccessCount(puts);
+          synchronized (queue) {
+            while(!putList.isEmpty()) {
+              if(!queue.addTail(putList.removeFirst())) {
+                StringBuilder msg = new StringBuilder();
+                msg.append("Queue add failed, this shouldn't be able to ");
+                msg.append("happen. A portion of the transaction has been ");
+                msg.append("added to the queue but the remaining portion ");
+                msg.append("cannot be added. Those messages will be consumed ");
+                msg.append("despite this transaction failing. Please report.");
+                msg.append(channelNameDescriptor);
+                LOG.error(msg.toString());
+                Preconditions.checkState(false, msg.toString());
+              }
+            }
+            queue.completeTransaction(transactionID);
+          }
         } catch (IOException e) {
           throw new ChannelException("Commit failed due to IO error "
-              + channelNameDescriptor, e);
+                  + channelNameDescriptor, e);
+        } finally {
+          log.unlockShared();
         }
-      } else if(takes > 0) {
+
+      } else if (takes > 0) {
+        if(!log.tryLockShared()) {
+          throw new ChannelException("Failed to obtain lock for writing to the log. "
+              + "Try increasing the log write timeout value or disabling it by "
+              + "setting it to 0. " + channelNameDescriptor);
+        }
         try {
           log.commitTake(transactionID);
+          queue.completeTransaction(transactionID);
           channelCounter.addToEventTakeSuccessCount(takes);
         } catch (IOException e) {
           throw new ChannelException("Commit failed due to IO error "
-               + channelNameDescriptor, e);
+              + channelNameDescriptor, e);
+        } finally {
+          log.unlockShared();
         }
         queueRemaining.release(takes);
       }
@@ -426,31 +475,44 @@ public class FileChannel extends BasicChannelSemantics {
       takeList.clear();
       channelCounter.setChannelSize(queue.getSize());
     }
-
     @Override
     protected void doRollback() throws InterruptedException {
       int puts = putList.size();
       int takes = takeList.size();
-      if(takes > 0) {
-        Preconditions.checkState(puts == 0, "nonzero puts and takes "
-            + channelNameDescriptor);
-        while(!takeList.isEmpty()) {
-          Preconditions.checkState(queue.addHead(takeList.removeLast()),
-              "Queue add failed, this shouldn't be able to happen "
-                   + channelNameDescriptor);
-        }
-      }
-      queueRemaining.release(puts);
+      boolean lockAcquired = log.tryLockShared();
       try {
+        if(!lockAcquired) {
+          throw new ChannelException("Failed to obtain lock for writing to the log. "
+              + "Try increasing the log write timeout value or disabling it by "
+              + "setting it to 0. " + channelNameDescriptor);
+        }
         log.rollback(transactionID);
+        if(takes > 0) {
+          Preconditions.checkState(puts == 0, "nonzero puts and takes "
+              + channelNameDescriptor);
+          synchronized (queue) {
+            while (!takeList.isEmpty()) {
+              Preconditions.checkState(queue.addHead(takeList.removeLast()),
+                  "Queue add failed, this shouldn't be able to happen "
+                      + channelNameDescriptor);
+            }
+            queue.completeTransaction(transactionID);
+          }
+        }
+        putList.clear();
+        takeList.clear();
+        channelCounter.setChannelSize(queue.getSize());
       } catch (IOException e) {
         throw new ChannelException("Commit failed due to IO error "
-             + channelNameDescriptor, e);
+            + channelNameDescriptor, e);
+      } finally {
+        if(lockAcquired) {
+          log.unlockShared();
+        }
+        // since rollback is being called, puts will never make it on
+        // to the queue and we need to be sure to release the resources
+        queueRemaining.release(puts);
       }
-      putList.clear();
-      takeList.clear();
-      channelCounter.setChannelSize(queue.getSize());
     }
-
   }
 }
