@@ -18,10 +18,10 @@
 
 package org.apache.flume.sink.hdfs;
 
-import java.io.IOException;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
-import org.apache.flume.sink.FlumeFormatter;
+import org.apache.flume.serialization.EventSerializer;
+import org.apache.flume.serialization.EventSerializerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,52 +33,64 @@ import org.apache.hadoop.io.compress.DefaultCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+
 public class HDFSCompressedDataStream implements HDFSWriter {
 
   private static final Logger logger =
-      LoggerFactory.getLogger(HDFSCompressedDataStream.class);
+          LoggerFactory.getLogger(HDFSCompressedDataStream.class);
 
   private FSDataOutputStream fsOut;
   private CompressionOutputStream cmpOut;
   private boolean isFinished = false;
 
+  private String serializerType;
+  private Context serializerContext;
+  private EventSerializer serializer;
+
   @Override
   public void configure(Context context) {
-    // no-op
+    serializerType = context.getString("serializer", "TEXT");
+    serializerContext =
+            new Context(context.getSubProperties(EventSerializer.CTX_PREFIX));
   }
 
   @Override
-  public void open(String filePath, FlumeFormatter fmt) throws IOException {
+  public void open(String filePath) throws IOException {
     DefaultCodec defCodec = new DefaultCodec();
     CompressionType cType = CompressionType.BLOCK;
-    open(filePath, defCodec, cType, fmt);
+    open(filePath, defCodec, cType);
   }
 
   @Override
   public void open(String filePath, CompressionCodec codec,
-      CompressionType cType, FlumeFormatter fmt) throws IOException {
+                   CompressionType cType) throws IOException {
     Configuration conf = new Configuration();
     Path dstPath = new Path(filePath);
     FileSystem hdfs = dstPath.getFileSystem(conf);
 
     if (conf.getBoolean("hdfs.append.support", false) == true && hdfs.isFile
-    (dstPath)) {
+            (dstPath)) {
       fsOut = hdfs.append(dstPath);
     } else {
       fsOut = hdfs.create(dstPath);
     }
     cmpOut = codec.createOutputStream(fsOut);
     isFinished = false;
+
+    serializer = EventSerializerFactory.getInstance(
+            serializerType, serializerContext, cmpOut);
   }
 
   @Override
-  public void append(Event e, FlumeFormatter fmt) throws IOException {
+  public void append(Event e) throws IOException {
     if (isFinished) {
       cmpOut.resetState();
       isFinished = false;
     }
-    byte[] bValue = fmt.getBytes(e);
-    cmpOut.write(bValue);
+    serializer.write(e);
+    //byte[] bValue = fmt.getBytes(e);
+    //cmpOut.write(bValue);
   }
 
   @Override

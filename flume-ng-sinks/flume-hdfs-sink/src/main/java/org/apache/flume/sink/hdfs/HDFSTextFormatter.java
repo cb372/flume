@@ -19,17 +19,17 @@
 
 package org.apache.flume.sink.hdfs;
 
-import java.util.Arrays;
-
 import org.apache.flume.Context;
 import org.apache.flume.Event;
-import org.apache.flume.sink.FlumeFormatter;
-//import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+
+import java.util.Collections;
+
+//import org.apache.hadoop.io.BytesWritable;
 
 
-public class HDFSTextFormatter implements FlumeFormatter {
+public class HDFSTextFormatter implements SeqFileFormatter {
 
   private Text makeText(Event e) {
     Text textObject = new Text();
@@ -48,7 +48,13 @@ public class HDFSTextFormatter implements FlumeFormatter {
   }
 
   @Override
-  public Object getKey(Event e) {
+  public Iterable<Record> format(Event e) {
+    Object key = getKey(e);
+    Object value = getValue(e);
+    return Collections.singletonList(new Record(key, value));
+  }
+
+  private Object getKey(Event e) {
     // Write the data to HDFS
     String timestamp = e.getHeaders().get("timestamp");
     long eventStamp;
@@ -58,30 +64,20 @@ public class HDFSTextFormatter implements FlumeFormatter {
     } else {
       eventStamp = Long.valueOf(timestamp);
     }
-    LongWritable longObject = new LongWritable(eventStamp);
-    return longObject;
+    return new LongWritable(eventStamp);
   }
 
-  @Override
-  public Object getValue(Event e) {
+  private Object getValue(Event e) {
     return makeText(e);
   }
 
-  @Override
-  public byte[] getBytes(Event e) {
-    Text record = makeText(e);
-    record.append("\n".getBytes(), 0, 1);
-    byte[] rawBytes = record.getBytes();
-    return Arrays.copyOf(rawBytes, record.getLength());
-  }
+  public static class Builder implements SeqFileFormatter.Builder {
 
-  public static class Builder implements FlumeFormatter.Builder {
-    
     @Override
-    public FlumeFormatter build(Context context) {
+    public SeqFileFormatter build(Context context) {
       return new HDFSTextFormatter();
     }
-  
+
   }
 
 }

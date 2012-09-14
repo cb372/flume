@@ -1,4 +1,3 @@
-
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -19,18 +18,10 @@
 
 package org.apache.flume.sink.hdfs;
 
-import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-
+import com.google.common.base.Throwables;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
 import org.apache.flume.instrumentation.SinkCounter;
-import org.apache.flume.sink.FlumeFormatter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -40,7 +31,13 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Throwables;
+import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Internal API intended for HDFSSink use.
@@ -50,7 +47,7 @@ import com.google.common.base.Throwables;
 class BucketWriter {
 
   private static final Logger LOG = LoggerFactory
-      .getLogger(BucketWriter.class);
+          .getLogger(BucketWriter.class);
 
   private static final String IN_USE_EXT = ".tmp";
   /**
@@ -59,7 +56,6 @@ class BucketWriter {
   private static final Integer staticLock = new Integer(1);
 
   private final HDFSWriter writer;
-  private final FlumeFormatter formatter;
   private final long rollInterval;
   private final long rollSize;
   private final long rollCount;
@@ -85,10 +81,10 @@ class BucketWriter {
   private SinkCounter sinkCounter;
 
   BucketWriter(long rollInterval, long rollSize, long rollCount, long batchSize,
-      Context context, String filePath, CompressionCodec codeC,
-      CompressionType compType, HDFSWriter writer, FlumeFormatter formatter,
-      ScheduledExecutorService timedRollerPool, UserGroupInformation user,
-      SinkCounter sinkCounter) {
+               Context context, String filePath, CompressionCodec codeC,
+               CompressionType compType, HDFSWriter writer,
+               ScheduledExecutorService timedRollerPool, UserGroupInformation user,
+               SinkCounter sinkCounter) {
     this.rollInterval = rollInterval;
     this.rollSize = rollSize;
     this.rollCount = rollCount;
@@ -98,7 +94,6 @@ class BucketWriter {
     this.codeC = codeC;
     this.compType = compType;
     this.writer = writer;
-    this.formatter = formatter;
     this.timedRollerPool = timedRollerPool;
     this.user = user;
     this.sinkCounter = sinkCounter;
@@ -111,6 +106,7 @@ class BucketWriter {
 
   /**
    * Allow methods to act as another user (typically used for HDFS Kerberos)
+   *
    * @param <T>
    * @param action
    * @return
@@ -118,7 +114,7 @@ class BucketWriter {
    * @throws InterruptedException
    */
   private <T> T runPrivileged(final PrivilegedExceptionAction<T> action)
-      throws IOException, InterruptedException {
+          throws IOException, InterruptedException {
 
     if (user != null) {
       return user.doAs(action);
@@ -148,6 +144,7 @@ class BucketWriter {
 
   /**
    * open() is called by append()
+   *
    * @throws IOException
    */
   private void open() throws IOException, InterruptedException {
@@ -162,10 +159,11 @@ class BucketWriter {
 
   /**
    * doOpen() must only be called by open()
+   *
    * @throws IOException
    */
   private void doOpen() throws IOException {
-    if ((filePath == null) || (writer == null) || (formatter == null)) {
+    if ((filePath == null) || (writer == null)) {
       throw new IOException("Invalid file settings");
     }
 
@@ -187,14 +185,14 @@ class BucketWriter {
           // writer does in order to avoid shutdown hook & IllegalStateExceptions
           fileSystem = new Path(bucketPath).getFileSystem(config);
           LOG.info("Creating " + bucketPath + IN_USE_EXT);
-          writer.open(bucketPath + IN_USE_EXT, formatter);
+          writer.open(bucketPath + IN_USE_EXT);
         } else {
           bucketPath = filePath + "." + counter
-              + codeC.getDefaultExtension();
+                  + codeC.getDefaultExtension();
           // need to get reference to FS before writer does to avoid shutdown hook
           fileSystem = new Path(bucketPath).getFileSystem(config);
           LOG.info("Creating " + bucketPath + IN_USE_EXT);
-          writer.open(bucketPath + IN_USE_EXT, codeC, compType, formatter);
+          writer.open(bucketPath + IN_USE_EXT, codeC, compType);
         }
       } catch (Exception ex) {
         sinkCounter.incrementConnectionFailedCount();
@@ -214,17 +212,17 @@ class BucketWriter {
         @Override
         public Void call() throws Exception {
           LOG.debug("Rolling file ({}): Roll scheduled after {} sec elapsed.",
-              bucketPath + IN_USE_EXT, rollInterval);
+                  bucketPath + IN_USE_EXT, rollInterval);
           try {
             close();
-          } catch(Throwable t) {
+          } catch (Throwable t) {
             LOG.error("Unexpected error", t);
           }
           return null;
         }
       };
       timedRollFuture = timedRollerPool.schedule(action, rollInterval,
-          TimeUnit.SECONDS);
+              TimeUnit.SECONDS);
     }
 
     isOpen = true;
@@ -233,7 +231,9 @@ class BucketWriter {
   /**
    * Close the file handle and rename the temp file to the permanent filename.
    * Safe to call multiple times. Logs HDFSWriter.close() exceptions.
-   * @throws IOException On failure to rename if temp file exists.
+   *
+   * @throws IOException
+   *         On failure to rename if temp file exists.
    */
   public synchronized void close() throws IOException, InterruptedException {
     runPrivileged(new PrivilegedExceptionAction<Void>() {
@@ -247,6 +247,7 @@ class BucketWriter {
 
   /**
    * doClose() must only be called by close()
+   *
    * @throws IOException
    */
   private void doClose() throws IOException {
@@ -257,7 +258,7 @@ class BucketWriter {
         sinkCounter.incrementConnectionClosedCount();
       } catch (IOException e) {
         LOG.warn("failed to close() HDFSWriter for file (" + bucketPath +
-            IN_USE_EXT + "). Exception follows.", e);
+                IN_USE_EXT + "). Exception follows.", e);
         sinkCounter.incrementConnectionFailedCount();
       }
       isOpen = false;
@@ -292,6 +293,7 @@ class BucketWriter {
 
   /**
    * doFlush() must only be called by flush()
+   *
    * @throws IOException
    */
   private void doFlush() throws IOException {
@@ -322,16 +324,16 @@ class BucketWriter {
     // write the event
     try {
       sinkCounter.incrementEventDrainAttemptCount();
-      writer.append(event, formatter); // could block
+      writer.append(event); // could block
     } catch (IOException e) {
       LOG.warn("Caught IOException writing to HDFSWriter ({}). Closing file (" +
-          bucketPath + IN_USE_EXT + ") and rethrowing exception.",
-          e.getMessage());
+              bucketPath + IN_USE_EXT + ") and rethrowing exception.",
+              e.getMessage());
       try {
         close();
       } catch (IOException e2) {
         LOG.warn("Caught IOException while closing file (" +
-             bucketPath + IN_USE_EXT + "). Exception follows.", e2);
+                bucketPath + IN_USE_EXT + "). Exception follows.", e2);
       }
       throw e;
     }
@@ -372,7 +374,7 @@ class BucketWriter {
     Path srcPath = new Path(bucketPath + IN_USE_EXT);
     Path dstPath = new Path(bucketPath);
 
-    if(fileSystem.exists(srcPath)) { // could block
+    if (fileSystem.exists(srcPath)) { // could block
       LOG.info("Renaming " + srcPath + " to " + dstPath);
       fileSystem.rename(srcPath, dstPath); // could block
     }
@@ -381,7 +383,7 @@ class BucketWriter {
   @Override
   public String toString() {
     return "[ " + this.getClass().getSimpleName() + " filePath = " + filePath +
-        ", bucketPath = " + bucketPath + " ]";
+            ", bucketPath = " + bucketPath + " ]";
   }
 
   public boolean isBatchComplete() {

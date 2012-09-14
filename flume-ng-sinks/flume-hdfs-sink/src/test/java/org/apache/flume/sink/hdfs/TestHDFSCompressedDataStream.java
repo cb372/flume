@@ -19,13 +19,10 @@
 package org.apache.flume.sink.hdfs;
 
 import com.google.common.base.Charsets;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.util.zip.GZIPInputStream;
+import org.apache.flume.Context;
 import org.apache.flume.Event;
+import org.apache.flume.conf.Configurables;
 import org.apache.flume.event.EventBuilder;
-import org.apache.flume.sink.FlumeFormatter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -36,10 +33,15 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.zip.GZIPInputStream;
+
 public class TestHDFSCompressedDataStream {
 
   private static final Logger logger =
-      LoggerFactory.getLogger(TestHDFSCompressedDataStream.class);
+          LoggerFactory.getLogger(TestHDFSCompressedDataStream.class);
 
   // make sure the data makes it to disk if we sync() the data stream
   @Test
@@ -56,19 +58,20 @@ public class TestHDFSCompressedDataStream {
     CompressionCodecFactory factory = new CompressionCodecFactory(conf);
 
     HDFSCompressedDataStream writer = new HDFSCompressedDataStream();
-    FlumeFormatter fmt = new HDFSTextFormatter();
+    Configurables.configure(writer, new Context());
+
     writer.open(fileURI, factory.getCodec(new Path(fileURI)),
-        SequenceFile.CompressionType.BLOCK, fmt);
+            SequenceFile.CompressionType.BLOCK);
     String body = "yarf!";
     Event evt = EventBuilder.withBody(body, Charsets.UTF_8);
-    writer.append(evt, fmt);
+    writer.append(evt);
     writer.sync();
 
     byte[] buf = new byte[256];
     GZIPInputStream cmpIn = new GZIPInputStream(new FileInputStream(file));
     int len = cmpIn.read(buf);
     String result = new String(buf, 0, len, Charsets.UTF_8);
-    result = result.trim(); // HDFSTextFormatter adds a newline
+    result = result.trim(); // BodyTestEventSerializer adds a newline
 
     Assert.assertEquals("input and output must match", body, result);
   }

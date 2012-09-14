@@ -18,40 +18,39 @@
  */
 package org.apache.flume.sink.hdfs;
 
-import static org.junit.Assert.assertTrue;
-
 import org.apache.flume.Context;
-import org.apache.flume.sink.FlumeFormatter;
 import org.junit.Test;
 
-public class TestHDFSFormatterFactory {
+import static org.junit.Assert.assertTrue;
+
+public class TestSeqFileFormatterFactory {
 
   @Test
   public void getTextFormatter() {
-    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Text", new Context());
+    SeqFileFormatter formatter = SeqFileFormatterFactory.getFormatter("Text", new Context());
 
-    assertTrue(formatter != null);   
-    assertTrue(formatter.getClass().getName(), 
-      formatter instanceof HDFSTextFormatter);   
-  }  
+    assertTrue(formatter != null);
+    assertTrue(formatter.getClass().getName(),
+            formatter instanceof HDFSTextFormatter);
+  }
 
   @Test
   public void getWritableFormatter() {
-    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter("Writable", new Context());
+    SeqFileFormatter formatter = SeqFileFormatterFactory.getFormatter("Writable", new Context());
 
-    assertTrue(formatter != null);   
-    assertTrue(formatter.getClass().getName(), 
-      formatter instanceof HDFSWritableFormatter);   
-  }  
+    assertTrue(formatter != null);
+    assertTrue(formatter.getClass().getName(),
+            formatter instanceof HDFSWritableFormatter);
+  }
 
   @Test
   public void getCustomFormatter() {
-    FlumeFormatter formatter = HDFSFormatterFactory.getFormatter(
-      "org.apache.flume.sink.hdfs.MyCustomFormatter$Builder", new Context());
+    SeqFileFormatter formatter = SeqFileFormatterFactory.getFormatter(
+            "org.apache.flume.sink.hdfs.MyCustomFormatter$Builder", new Context());
 
-    assertTrue(formatter != null);   
-    assertTrue(formatter.getClass().getName(), 
-      formatter instanceof MyCustomFormatter);   
-  }  
+    assertTrue(formatter != null);
+    assertTrue(formatter.getClass().getName(),
+            formatter instanceof MyCustomFormatter);
+  }
 
 }

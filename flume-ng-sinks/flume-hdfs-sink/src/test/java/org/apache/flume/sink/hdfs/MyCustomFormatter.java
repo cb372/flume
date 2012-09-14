@@ -21,11 +21,12 @@ package org.apache.flume.sink.hdfs;
 
 import org.apache.flume.Context;
 import org.apache.flume.Event;
-import org.apache.flume.sink.FlumeFormatter;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 
-public class MyCustomFormatter implements FlumeFormatter {
+import java.util.Arrays;
+
+public class MyCustomFormatter implements SeqFileFormatter {
 
   @Override
   public Class<LongWritable> getKeyClass() {
@@ -38,27 +39,20 @@ public class MyCustomFormatter implements FlumeFormatter {
   }
 
   @Override
-  public Object getKey(Event e) {
-    return new LongWritable(1234L); 
-  }
-  
-  @Override
-  public Object getValue(Event e) {
-    return new BytesWritable(new byte[10]); 
+  public Iterable<Record> format(Event e) {
+    return Arrays.asList( //
+            new Record(new LongWritable(1234L), new BytesWritable(new byte[10])), //
+            new Record(new LongWritable(4567L), new BytesWritable(new byte[20])) //
+    );
   }
 
-  @Override
-  public byte[] getBytes(Event e) {
-    return new byte[10]; 
-  }
-
-  public static class Builder implements FlumeFormatter.Builder {
+  public static class Builder implements SeqFileFormatter.Builder {
 
     @Override
-    public FlumeFormatter build(Context context) {
+    public SeqFileFormatter build(Context context) {
       return new MyCustomFormatter();
     }
-  
+
   }
 
 }

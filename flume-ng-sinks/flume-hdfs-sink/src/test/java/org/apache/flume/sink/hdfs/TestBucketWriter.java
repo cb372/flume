@@ -18,11 +18,7 @@
  */
 package org.apache.flume.sink.hdfs;
 
-import java.io.IOException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Charsets;
 import org.apache.flume.Context;
 import org.apache.flume.Event;
 import org.apache.flume.event.EventBuilder;
@@ -35,12 +31,15 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Charsets;
+import java.io.IOException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class TestBucketWriter {
 
   private static Logger logger =
-      LoggerFactory.getLogger(TestBucketWriter.class);
+          LoggerFactory.getLogger(TestBucketWriter.class);
   private Context ctx = new Context();
 
   private static ScheduledExecutorService timedRollerPool;
@@ -61,11 +60,10 @@ public class TestBucketWriter {
   public void testEventCountingRoller() throws IOException, InterruptedException {
     int maxEvents = 100;
     MockHDFSWriter hdfsWriter = new MockHDFSWriter();
-    HDFSTextFormatter formatter = new HDFSTextFormatter();
     BucketWriter bucketWriter = new BucketWriter(0, 0, maxEvents, 0, ctx,
-        "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
-        formatter, timedRollerPool, null,
-        new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
+            "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
+            timedRollerPool, null,
+            new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
 
     Event e = EventBuilder.withBody("foo", Charsets.UTF_8);
     for (int i = 0; i < 1000; i++) {
@@ -85,11 +83,10 @@ public class TestBucketWriter {
   public void testSizeRoller() throws IOException, InterruptedException {
     int maxBytes = 300;
     MockHDFSWriter hdfsWriter = new MockHDFSWriter();
-    HDFSTextFormatter formatter = new HDFSTextFormatter();
     BucketWriter bucketWriter = new BucketWriter(0, maxBytes, 0, 0, ctx,
-        "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
-        formatter, timedRollerPool, null,
-        new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
+            "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
+            timedRollerPool, null,
+            new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
 
     Event e = EventBuilder.withBody("foo", Charsets.UTF_8);
     for (int i = 0; i < 1000; i++) {
@@ -111,11 +108,10 @@ public class TestBucketWriter {
     final int NUM_EVENTS = 10;
 
     MockHDFSWriter hdfsWriter = new MockHDFSWriter();
-    HDFSTextFormatter formatter = new HDFSTextFormatter();
     BucketWriter bucketWriter = new BucketWriter(ROLL_INTERVAL, 0, 0, 0, ctx,
-        "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
-        formatter, timedRollerPool, null,
-        new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
+            "/tmp/file", null, SequenceFile.CompressionType.NONE, hdfsWriter,
+            timedRollerPool, null,
+            new SinkCounter("test-bucket-writer-" + System.currentTimeMillis()));
 
     Event e = EventBuilder.withBody("foo", Charsets.UTF_8);
     long startNanos = System.nanoTime();
@@ -130,7 +126,7 @@ public class TestBucketWriter {
     bucketWriter.append(e);
 
     long elapsedMillis = TimeUnit.MILLISECONDS.convert(
-        System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
+            System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
     long elapsedSeconds = elapsedMillis / 1000L;
 
     logger.info("Time elapsed: {} milliseconds", elapsedMillis);
@@ -140,9 +136,9 @@ public class TestBucketWriter {
     logger.info("Number of files closed: {}", hdfsWriter.getFilesClosed());
 
     Assert.assertEquals("events written", NUM_EVENTS,
-        hdfsWriter.getEventsWritten());
+            hdfsWriter.getEventsWritten());
     Assert.assertEquals("bytes written", e.getBody().length * NUM_EVENTS,
-        hdfsWriter.getBytesWritten());
+            hdfsWriter.getBytesWritten());
     Assert.assertEquals("files opened", 2, hdfsWriter.getFilesOpened());
 
     // before auto-roll

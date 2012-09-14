@@ -20,42 +20,42 @@ package org.apache.flume.sink.hdfs;
 
 import com.google.common.base.Preconditions;
 import org.apache.flume.Context;
-import org.apache.flume.sink.FlumeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class HDFSFormatterFactory {
+public class SeqFileFormatterFactory {
 
   private static final Logger logger =
-      LoggerFactory.getLogger(HDFSFormatterFactory.class);
+          LoggerFactory.getLogger(SeqFileFormatterFactory.class);
 
   /**
    * {@link Context} prefix
    */
   static final String CTX_PREFIX = "writeFormat.";
 
-  static FlumeFormatter getFormatter(String formatType, Context context) {
+  @SuppressWarnings("unchecked")
+  static SeqFileFormatter getFormatter(String formatType, Context context) {
 
     Preconditions.checkNotNull(formatType,
-        "format type must not be null");
+            "format type must not be null");
 
     // try to find builder class in enum of known formatters
-    HDFSFormatterType type;
+    SeqFileFormatterType type;
     try {
-      type = HDFSFormatterType.valueOf(formatType);
+      type = SeqFileFormatterType.valueOf(formatType);
     } catch (IllegalArgumentException e) {
       logger.debug("Not in enum, loading builder class: {}", formatType);
-      type = HDFSFormatterType.Other;
+      type = SeqFileFormatterType.Other;
     }
-    Class<? extends FlumeFormatter.Builder> builderClass =
-        type.getBuilderClass();
+    Class<? extends SeqFileFormatter.Builder> builderClass =
+            type.getBuilderClass();
 
     // handle the case where they have specified their own builder in the config
     if (builderClass == null) {
       try {
         Class c = Class.forName(formatType);
-        if (c != null && FlumeFormatter.Builder.class.isAssignableFrom(c)) {
-          builderClass = (Class<? extends FlumeFormatter.Builder>) c;
+        if (c != null && SeqFileFormatter.Builder.class.isAssignableFrom(c)) {
+          builderClass = (Class<? extends SeqFileFormatter.Builder>) c;
         } else {
           logger.error("Unable to instantiate Builder from {}", formatType);
           return null;
@@ -63,11 +63,14 @@ public class HDFSFormatterFactory {
       } catch (ClassNotFoundException ex) {
         logger.error("Class not found: " + formatType, ex);
         return null;
+      } catch (ClassCastException ex) {
+        logger.error("Class does not extend " + SeqFileFormatter.Builder.class.getCanonicalName() + ": " + formatType, ex);
+        return null;
       }
     }
 
     // build the builder
-    FlumeFormatter.Builder builder;
+    SeqFileFormatter.Builder builder;
     try {
       builder = builderClass.newInstance();
     } catch (InstantiationException ex) {

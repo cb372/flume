@@ -18,20 +18,18 @@
  */
 package org.apache.flume.sink.hdfs;
 
-import org.apache.flume.sink.FlumeFormatter;
-
-public enum HDFSFormatterType {
+public enum SeqFileFormatterType {
   Writable(HDFSWritableFormatter.Builder.class),
   Text(HDFSTextFormatter.Builder.class),
   Other(null);
 
-  private final Class<? extends FlumeFormatter.Builder> builderClass;
+  private final Class<? extends SeqFileFormatter.Builder> builderClass;
 
-  HDFSFormatterType(Class<? extends FlumeFormatter.Builder> builderClass) {
+  SeqFileFormatterType(Class<? extends SeqFileFormatter.Builder> builderClass) {
     this.builderClass = builderClass;
   }
 
-  public Class<? extends FlumeFormatter.Builder> getBuilderClass() {
+  public Class<? extends SeqFileFormatter.Builder> getBuilderClass() {
     return builderClass;
   }
 
