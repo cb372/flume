@@ -43,7 +43,8 @@ public class HDFSSequenceFile implements HDFSWriter {
 
   @Override
   public void configure(Context context) {
-    writeFormat = context.getString("hdfs.writeFormat");
+    // use binary writable format by default
+    writeFormat = context.getString("hdfs.writeFormat", SeqFileFormatterType.Writable.name());
     serializerContext = new Context(
             context.getSubProperties(SeqFileFormatterFactory.CTX_PREFIX));
     formatter = SeqFileFormatterFactory
